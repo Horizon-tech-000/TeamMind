@@ -1,0 +1,205 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AppShell } from "@/components/AppShell";
+import { Button } from "@/components/ui/button";
+import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
+
+export const Route = createFileRoute("/dashboard")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard — TeamMind" },
+      { name: "description", content: "Your team's knowledge dashboard." },
+    ],
+  }),
+  component: DashboardPage,
+});
+
+const projects = [
+  {
+    name: "Platform Migration Q3",
+    color: "#00C9B1",
+    members: ["AM", "JR", "KP", "DL"],
+    sources: 4,
+    activity: "Active 2 hours ago",
+  },
+  {
+    name: "Security Incident Response",
+    color: "#F04438",
+    members: ["SO", "MN", "TR"],
+    sources: 3,
+    activity: "Active 30 minutes ago",
+  },
+  {
+    name: "API Gateway Redesign",
+    color: "#F79009",
+    members: ["LP", "AM", "BC", "RH"],
+    sources: 5,
+    activity: "Active yesterday",
+  },
+];
+
+const avatarColors = ["#0F1C2E", "#00C9B1", "#6B7A90", "#12B76A"];
+
+const captured = [
+  {
+    summary:
+      "Decision: Postgres chosen over MongoDB for the API gateway database — see thread",
+    sources: ["Slack #platform-team"],
+    confidence: "high" as const,
+    time: "1h ago",
+  },
+  {
+    summary:
+      "New runbook published for handling Cloudflare 522 errors during deploys",
+    sources: ["Confluence", "Google Drive"],
+    confidence: "medium" as const,
+    time: "3h ago",
+  },
+  {
+    summary:
+      "Jira PLAT-482 closed — SSO rollout to engineering org completed without incident",
+    sources: ["Jira", "Slack #sso-rollout"],
+    confidence: "high" as const,
+    time: "yesterday",
+  },
+];
+
+const flagged = [
+  {
+    question: "Why did we drop Kafka in favour of NATS for the event bus?",
+    asker: "Priya Shah",
+    project: "Platform Migration Q3",
+  },
+  {
+    question:
+      "What's the rollback procedure if the new auth gateway fails in prod?",
+    asker: "Marcus Okafor",
+    project: "Security Incident Response",
+  },
+];
+
+const confidenceStyles = {
+  high: "bg-success/10 text-success border-success/20",
+  medium: "bg-warning/10 text-warning border-warning/20",
+  low: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
+const confidenceLabel = { high: "High", medium: "Medium", low: "Low" };
+
+function DashboardPage() {
+  return (
+    <AppShell>
+      <div className="space-y-10">
+        {/* Section 1 */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading text-xl font-semibold">Your Projects</h2>
+            <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-9">
+              <Plus className="h-4 w-4" />
+              New Project
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {projects.map((p) => (
+              <button
+                key={p.name}
+                className="text-left bg-card rounded-xl border border-border overflow-hidden flex hover:-translate-y-0.5 transition-transform"
+                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+              >
+                <div className="w-1.5 shrink-0" style={{ background: p.color }} />
+                <div className="p-5 flex-1">
+                  <h3 className="font-heading font-semibold text-base mb-3">
+                    {p.name}
+                  </h3>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex -space-x-2">
+                      {p.members.slice(0, 4).map((m, i) => (
+                        <div
+                          key={i}
+                          className="h-7 w-7 rounded-full border-2 border-card flex items-center justify-center text-[10px] font-semibold text-white"
+                          style={{ background: avatarColors[i % avatarColors.length] }}
+                        >
+                          {m}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
+                      {p.sources} sources
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{p.activity}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Section 2 */}
+        <section>
+          <h2 className="font-heading text-xl font-semibold mb-4">
+            Knowledge captured while you were away
+          </h2>
+          <div className="space-y-3">
+            {captured.map((c, i) => (
+              <div
+                key={i}
+                className="bg-card rounded-xl border border-border p-5 flex gap-4"
+                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+              >
+                <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm leading-relaxed">{c.summary}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    {c.sources.map((s) => (
+                      <span
+                        key={s}
+                        className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-md border font-semibold ${confidenceStyles[c.confidence]}`}
+                    >
+                      {confidenceLabel[c.confidence]}
+                    </span>
+                    <span className="text-xs text-muted-foreground">· {c.time}</span>
+                    <button className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
+                      View source <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Section 3 */}
+        <section>
+          <h2 className="font-heading text-xl font-semibold mb-4">
+            Flagged for your input
+          </h2>
+          <div className="bg-card rounded-xl border border-border divide-y divide-border" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+            {flagged.map((f, i) => (
+              <div key={i} className="p-5 flex items-center gap-4">
+                <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+                  <Flag className="h-4 w-4 text-warning" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm">{f.question}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Asked by <span className="font-medium text-foreground">{f.asker}</span> · {f.project}
+                  </p>
+                </div>
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 shrink-0">
+                  Answer
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </AppShell>
+  );
+}
