@@ -29,7 +29,7 @@ function SignupPage() {
           className="mt-8 space-y-5"
           onSubmit={(e) => {
             e.preventDefault();
-            navigate({ to: "/login" });
+            navigate({ to: "/dashboard" });
           }}
         >
           <div className="space-y-2">
