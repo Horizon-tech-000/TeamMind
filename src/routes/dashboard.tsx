@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
+import { NewProjectModal } from "@/components/NewProjectModal";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -86,14 +88,16 @@ const confidenceStyles = {
 const confidenceLabel = { high: "High", medium: "Medium", low: "Low" };
 
 function DashboardPage() {
+  const [showNew, setShowNew] = useState(false);
   return (
     <AppShell>
+      <NewProjectModal open={showNew} onClose={() => setShowNew(false)} />
       <div className="space-y-10">
         {/* Section 1 */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading text-xl font-semibold">Your Projects</h2>
-            <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-9">
+            <Button onClick={() => setShowNew(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 h-9">
               <Plus className="h-4 w-4" />
               New Project
             </Button>
