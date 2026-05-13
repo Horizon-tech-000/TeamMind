@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
+import { NewProjectModal } from "@/components/NewProjectModal";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
