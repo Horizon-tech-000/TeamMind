@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -228,9 +228,10 @@ function ProjectPage() {
                 {answers.map((a, i) => {
                   const c = confidenceMeta[a.confidence];
                   return (
-                    <article
+                    <Link
+                      to="/answer"
                       key={i}
-                      className="bg-card rounded-xl border border-border p-6"
+                      className="block bg-card rounded-xl border border-border p-6 hover:border-accent/50 transition-colors"
                       style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
                     >
                       <div className="flex items-center gap-2 mb-3">
@@ -288,7 +289,7 @@ function ProjectPage() {
                           ))}
                         </div>
                       </div>
-                    </article>
+                    </Link>
                   );
                 })}
               </div>
