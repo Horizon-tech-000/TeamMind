@@ -36,6 +36,7 @@ const suggestedMembers = [
 ];
 
 export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
