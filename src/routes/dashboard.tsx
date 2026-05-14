@@ -104,8 +104,9 @@ function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {projects.map((p) => (
-              <button
+              <Link
                 key={p.name}
+                to="/projects"
                 className="text-left bg-card rounded-xl border border-border overflow-hidden flex hover:-translate-y-0.5 transition-transform"
                 style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
               >
