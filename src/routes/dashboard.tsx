@@ -133,7 +133,7 @@ function DashboardPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">{p.activity}</p>
                 </div>
-              </button>
+              </Link>
             ))}
           </div>
         </section>
