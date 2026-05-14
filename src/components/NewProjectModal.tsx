@@ -236,7 +236,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               <p className="mt-3 text-muted-foreground leading-relaxed">
                 Your sources are being indexed. This usually takes a few minutes.
               </p>
-              <Button className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90 h-11 px-6" onClick={close}>
+              <Button className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90 h-11 px-6" onClick={() => { reset(); onClose(); navigate({ to: "/projects" }); }}>
                 <Sparkles className="h-4 w-4" />
                 Go to project
               </Button>
