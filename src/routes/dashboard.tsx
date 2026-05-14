@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
@@ -104,8 +104,9 @@ function DashboardPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {projects.map((p) => (
-              <button
+              <Link
                 key={p.name}
+                to="/projects"
                 className="text-left bg-card rounded-xl border border-border overflow-hidden flex hover:-translate-y-0.5 transition-transform"
                 style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
               >
@@ -132,7 +133,7 @@ function DashboardPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">{p.activity}</p>
                 </div>
-              </button>
+              </Link>
             ))}
           </div>
         </section>
@@ -169,9 +170,9 @@ function DashboardPage() {
                       {confidenceLabel[c.confidence]}
                     </span>
                     <span className="text-xs text-muted-foreground">· {c.time}</span>
-                    <button className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
+                    <Link to="/answer" className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
                       View source <ExternalLink className="h-3 w-3" />
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </div>
