@@ -170,9 +170,9 @@ function DashboardPage() {
                       {confidenceLabel[c.confidence]}
                     </span>
                     <span className="text-xs text-muted-foreground">· {c.time}</span>
-                    <button className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
+                    <Link to="/answer" className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
                       View source <ExternalLink className="h-3 w-3" />
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </div>
