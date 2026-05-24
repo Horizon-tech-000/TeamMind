@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, X, Search, Slack, Briefcase, FolderOpen, BookOpen, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, X, Search, Slack, Briefcase, FolderOpen, BookOpen, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { createProject } from "@/lib/projects";
 
 type Step = 1 | 2 | 3 | 4;
 
