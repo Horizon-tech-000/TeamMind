@@ -289,17 +289,24 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
                 Cancel
               </button>
             ) : (
-              <Button variant="outline" onClick={() => setStep((s) => (s - 1) as Step)}>
+              <Button variant="outline" onClick={() => setStep((s) => (s - 1) as Step)} disabled={creating}>
                 Back
               </Button>
             )}
-            <Button
-              className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6"
-              disabled={step === 1 && !name.trim()}
-              onClick={() => setStep((s) => (s + 1) as Step)}
-            >
-              {step === 3 ? "Create Project" : "Continue"}
-            </Button>
+            <div className="flex items-center gap-3">
+              {error && <span className="text-xs text-destructive">{error}</span>}
+              <Button
+                className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6"
+                disabled={(step === 1 && !name.trim()) || creating}
+                onClick={() => {
+                  if (step === 3) handleCreate();
+                  else setStep((s) => (s + 1) as Step);
+                }}
+              >
+                {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+                {step === 3 ? "Create Project" : "Continue"}
+              </Button>
+            </div>
           </div>
         )}
       </div>
