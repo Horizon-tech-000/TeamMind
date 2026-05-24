@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -20,15 +20,16 @@ import {
   Plus,
   ExternalLink,
 } from "lucide-react";
+import { getProject, type ConnectedSource, type Project, type ProjectMember } from "@/lib/projects";
 
 export const Route = createFileRoute("/projects")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "API Gateway Redesign — TeamMind" },
-      {
-        name: "description",
-        content: "Project knowledge for API Gateway Redesign.",
-      },
+      { title: "Project — TeamMind" },
+      { name: "description", content: "Project knowledge." },
     ],
   }),
   component: ProjectPage,
