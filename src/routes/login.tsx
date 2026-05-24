@@ -32,20 +32,28 @@ function LoginPage() {
 
         <form
           className="mt-8 space-y-5"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            setError(null);
+            setLoading(true);
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            setLoading(false);
+            if (error) {
+              setError(error.message);
+              return;
+            }
             navigate({ to: "/dashboard" });
           }}
         >
           <div className="space-y-2">
             <Label htmlFor="email">Work email</Label>
-            <Input id="email" type="email" placeholder="jane@company.com" required />
+            <Input id="email" type="email" placeholder="jane@company.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
             </div>
-            <Input id="password" type="password" placeholder="••••••••" required />
+            <Input id="password" type="password" placeholder="••••••••" required value={password} onChange={(e) => setPassword(e.target.value)} />
             <div className="flex justify-end">
               <a href="#" className="text-xs text-accent hover:underline font-medium">
                 Forgot password?
@@ -53,11 +61,14 @@ function LoginPage() {
             </div>
           </div>
 
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
           <Button
             type="submit"
+            disabled={loading}
             className="w-full h-11 bg-accent text-accent-foreground hover:bg-accent/90 font-medium"
           >
-            Log in
+            {loading ? "Logging in…" : "Log in"}
           </Button>
         </form>
 
