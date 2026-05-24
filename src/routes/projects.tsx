@@ -152,7 +152,39 @@ const confidenceMeta = {
 };
 
 function ProjectPage() {
+  const { id } = Route.useSearch();
   const [tab, setTab] = useState<"answers" | "open">("answers");
+  const [project, setProject] = useState<Project | null>(null);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    getProject(id)
+      .then((d) => {
+        setProject(d.project);
+        setMembers(d.members);
+        setConnectedSources(d.sources);
+      })
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load project"));
+  }, [id]);
+
+  if (!id) {
+    return (
+      <AppShell>
+        <div className="text-sm text-muted-foreground">
+          No project selected. <Link to="/dashboard" className="text-accent underline">Go to dashboard</Link>.
+        </div>
+      </AppShell>
+    );
+  }
+  if (loadError) {
+    return <AppShell><div className="text-sm text-destructive">{loadError}</div></AppShell>;
+  }
+  if (!project) {
+    return <AppShell><div className="text-sm text-muted-foreground">Loading project…</div></AppShell>;
+  }
 
   return (
     <AppShell>
@@ -163,18 +195,18 @@ function ProjectPage() {
             {/* Header */}
             <div>
               <h1 className="font-heading text-3xl font-bold tracking-tight">
-                API Gateway Redesign
+                {project.name}
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                <SourcePill name="Slack" />
-                <SourcePill name="Jira" />
-                <SourcePill name="Drive" />
-                <SourcePill name="Confluence" />
+                {connectedSources.map((s) => (
+                  <SourcePill key={s.id} name={s.tool} />
+                ))}
                 <span className="text-xs text-muted-foreground ml-1">
-                  · 6 members
+                  · {members.length} member{members.length === 1 ? "" : "s"}
                 </span>
               </div>
             </div>
+
 
             {/* Ask box */}
             <div
