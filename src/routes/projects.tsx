@@ -39,6 +39,7 @@ const sourceColors: Record<string, string> = {
   Slack: "#4A154B",
   Jira: "#2684FF",
   Drive: "#1FA463",
+  "Google Drive": "#1FA463",
   Confluence: "#172B4D",
 };
 
