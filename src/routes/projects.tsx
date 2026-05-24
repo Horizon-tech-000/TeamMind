@@ -377,18 +377,21 @@ function ProjectPage() {
                 Connected Sources
               </h3>
               <ul className="space-y-3">
+                {connectedSources.length === 0 && (
+                  <li className="text-xs text-muted-foreground">No sources connected.</li>
+                )}
                 {connectedSources.map((s) => (
-                  <li key={s.name} className="flex items-center gap-3">
+                  <li key={s.id} className="flex items-center gap-3">
                     <span
                       className="h-7 w-7 rounded-md flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                      style={{ background: sourceColors[s.tool] }}
+                      style={{ background: sourceColors[s.tool] ?? "#6B7A90" }}
                     >
                       {s.tool[0]}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-sm font-medium truncate">{s.label ?? s.tool}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        Indexed {s.indexed}
+                        {s.tool}
                       </p>
                     </div>
                     <span className="h-2 w-2 rounded-full bg-success shrink-0" />
@@ -406,30 +409,34 @@ function ProjectPage() {
                 Members
               </h3>
               <ul className="space-y-3">
-                {members.map((m, i) => (
-                  <li key={m.name} className="flex items-center gap-3">
-                    <span
-                      className="h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                      style={{ background: avatarPalette[i % avatarPalette.length] }}
-                    >
-                      {m.initials}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{m.name}</p>
-                    </div>
-                    <span
-                      className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${
-                        m.role === "Owner"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {m.role}
-                    </span>
-                  </li>
-                ))}
+                {members.map((m, i) => {
+                  const display = m.name || m.email || "Unknown";
+                  return (
+                    <li key={m.id} className="flex items-center gap-3">
+                      <span
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                        style={{ background: avatarPalette[i % avatarPalette.length] }}
+                      >
+                        {initialsOf(display)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{display}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${
+                          m.role === "owner"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {m.role}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
+
 
             {/* Project health */}
             <div
