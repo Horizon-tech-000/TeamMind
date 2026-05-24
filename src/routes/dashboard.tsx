@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
 import { NewProjectModal } from "@/components/NewProjectModal";
+import { listMyProjects, type Project } from "@/lib/projects";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -15,30 +16,7 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
-const projects = [
-  {
-    name: "Platform Migration Q3",
-    color: "#00C9B1",
-    members: ["AM", "JR", "KP", "DL"],
-    sources: 4,
-    activity: "Active 2 hours ago",
-  },
-  {
-    name: "Security Incident Response",
-    color: "#F04438",
-    members: ["SO", "MN", "TR"],
-    sources: 3,
-    activity: "Active 30 minutes ago",
-  },
-  {
-    name: "API Gateway Redesign",
-    color: "#F79009",
-    members: ["LP", "AM", "BC", "RH"],
-    sources: 5,
-    activity: "Active yesterday",
-  },
-];
-
+const projectColors = ["#00C9B1", "#F04438", "#F79009", "#4A154B", "#2684FF", "#12B76A"];
 const avatarColors = ["#0F1C2E", "#00C9B1", "#6B7A90", "#12B76A"];
 
 const captured = [
