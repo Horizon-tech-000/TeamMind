@@ -67,9 +67,19 @@ const confidenceLabel = { high: "High", medium: "Medium", low: "Low" };
 
 function DashboardPage() {
   const [showNew, setShowNew] = useState(false);
+  const [projects, setProjects] = useState<Project[] | null>(null);
+
+  const load = () => {
+    listMyProjects().then(setProjects).catch(() => setProjects([]));
+  };
+  useEffect(() => { load(); }, []);
+
   return (
     <AppShell>
-      <NewProjectModal open={showNew} onClose={() => setShowNew(false)} />
+      <NewProjectModal
+        open={showNew}
+        onClose={() => { setShowNew(false); load(); }}
+      />
       <div className="space-y-10">
         {/* Section 1 */}
         <section>
@@ -80,41 +90,66 @@ function DashboardPage() {
               New Project
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {projects.map((p) => (
-              <Link
-                key={p.name}
-                to="/projects"
-                className="text-left bg-card rounded-xl border border-border overflow-hidden flex hover:-translate-y-0.5 transition-transform"
-                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+          {projects === null ? (
+            <div className="text-sm text-muted-foreground">Loading projects…</div>
+          ) : projects.length === 0 ? (
+            <div
+              className="bg-card rounded-xl border border-dashed border-border p-10 text-center"
+              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+            >
+              <p className="text-sm text-muted-foreground">
+                You have no projects yet — create your first one.
+              </p>
+              <Button
+                onClick={() => setShowNew(true)}
+                className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90 h-9"
               >
-                <div className="w-1.5 shrink-0" style={{ background: p.color }} />
-                <div className="p-5 flex-1">
-                  <h3 className="font-heading font-semibold text-base mb-3">
-                    {p.name}
-                  </h3>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="flex -space-x-2">
-                      {p.members.slice(0, 4).map((m, i) => (
-                        <div
-                          key={i}
-                          className="h-7 w-7 rounded-full border-2 border-card flex items-center justify-center text-[10px] font-semibold text-white"
-                          style={{ background: avatarColors[i % avatarColors.length] }}
-                        >
-                          {m}
+                <Plus className="h-4 w-4" />
+                New Project
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {projects.map((p, idx) => {
+                const color = projectColors[idx % projectColors.length];
+                const initial = p.name.trim().charAt(0).toUpperCase() || "P";
+                return (
+                  <Link
+                    key={p.id}
+                    to="/projects"
+                    search={{ id: p.id }}
+                    className="text-left bg-card rounded-xl border border-border overflow-hidden flex hover:-translate-y-0.5 transition-transform"
+                    style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+                  >
+                    <div className="w-1.5 shrink-0" style={{ background: color }} />
+                    <div className="p-5 flex-1">
+                      <h3 className="font-heading font-semibold text-base mb-3">
+                        {p.name}
+                      </h3>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="flex -space-x-2">
+                          <div
+                            className="h-7 w-7 rounded-full border-2 border-card flex items-center justify-center text-[10px] font-semibold text-white"
+                            style={{ background: avatarColors[0] }}
+                          >
+                            {initial}
+                          </div>
                         </div>
-                      ))}
+                        <span className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
+                          Project
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Created {new Date(p.created_at).toLocaleDateString()}
+                      </p>
                     </div>
-                    <span className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium">
-                      {p.sources} sources
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{p.activity}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </section>
+
 
         {/* Section 2 */}
         <section>
