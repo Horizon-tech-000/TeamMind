@@ -127,25 +127,21 @@ const statusColor = {
   green: "bg-success",
 };
 
-const connectedSources = [
-  { tool: "Slack" as const, name: "#api-gateway", indexed: "2 minutes ago" },
-  { tool: "Jira" as const, name: "PLAT board", indexed: "15 minutes ago" },
-  { tool: "Drive" as const, name: "API Gateway 2026", indexed: "1 hour ago" },
-  {
-    tool: "Confluence" as const,
-    name: "Platform / Gateway",
-    indexed: "3 hours ago",
-  },
-];
-
-const members = [
-  { name: "Aisha Mensah", initials: "AM", role: "Owner" },
-  { name: "Lena Park", initials: "LP", role: "Member" },
-  { name: "Marcus Okafor", initials: "MO", role: "Member" },
-  { name: "Priya Shah", initials: "PS", role: "Member" },
-  { name: "Ben Chen", initials: "BC", role: "Member" },
-  { name: "Rafael Hernandez", initials: "RH", role: "Member" },
-];
+function initialsOf(name: string | null | undefined) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.floor(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
 
 const avatarPalette = ["#0F1C2E", "#00C9B1", "#6B7A90", "#12B76A", "#F79009", "#4A154B"];
 
