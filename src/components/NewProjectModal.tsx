@@ -45,15 +45,43 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     slack: false, jira: false, drive: false, confluence: false,
   });
   const [added, setAdded] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   if (!open) return null;
 
   const reset = () => {
     setStep(1); setName(""); setDescription("");
     setConnected({ slack: false, jira: false, drive: false, confluence: false });
-    setAdded([]);
+    setAdded([]); setError(null); setCreatedId(null);
   };
   const close = () => { reset(); onClose(); };
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const sourcesPayload = sources
+        .filter((s) => connected[s.key])
+        .map((s) => ({ tool: s.name, label: s.connectedLabel }));
+      const membersPayload = added
+        .map((id) => suggestedMembers.find((m) => m.id === id)!)
+        .map((m) => ({ name: m.name, email: m.email }));
+      const id = await createProject({
+        name: name.trim(),
+        description,
+        sources: sourcesPayload,
+        members: membersPayload,
+      });
+      setCreatedId(id);
+      setStep(4);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/60 backdrop-blur-sm">
