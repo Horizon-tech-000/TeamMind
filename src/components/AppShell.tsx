@@ -1,7 +1,15 @@
 import { ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
-import { Bell, Search, Home, Folder, Flag, Settings, Shield } from "lucide-react";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { Bell, Search, Home, Folder, Flag, Settings, Shield, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
@@ -12,6 +20,15 @@ const navItems = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const email = user?.email ?? "";
+  const initials = (email.slice(0, 2) || "AM").toUpperCase();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate({ to: "/login" });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,9 +50,22 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Bell className="h-5 w-5 text-muted-foreground" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-accent" />
           </button>
-          <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-            AM
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent">
+                {initials}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {email && (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground truncate">{email}</div>
+              )}
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
