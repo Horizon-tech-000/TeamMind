@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, X, Search, Slack, Briefcase, FolderOpen, BookOpen, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, X, Search, Slack, Briefcase, FolderOpen, BookOpen, ShieldCheck, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { createProject } from "@/lib/projects";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -44,15 +45,43 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     slack: false, jira: false, drive: false, confluence: false,
   });
   const [added, setAdded] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   if (!open) return null;
 
   const reset = () => {
     setStep(1); setName(""); setDescription("");
     setConnected({ slack: false, jira: false, drive: false, confluence: false });
-    setAdded([]);
+    setAdded([]); setError(null); setCreatedId(null);
   };
   const close = () => { reset(); onClose(); };
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const sourcesPayload = sources
+        .filter((s) => connected[s.key])
+        .map((s) => ({ tool: s.name, label: s.connectedLabel }));
+      const membersPayload = added
+        .map((id) => suggestedMembers.find((m) => m.id === id)!)
+        .map((m) => ({ name: m.name, email: m.email }));
+      const id = await createProject({
+        name: name.trim(),
+        description,
+        sources: sourcesPayload,
+        members: membersPayload,
+      });
+      setCreatedId(id);
+      setStep(4);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary/60 backdrop-blur-sm">
@@ -236,7 +265,15 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
               <p className="mt-3 text-muted-foreground leading-relaxed">
                 Your sources are being indexed. This usually takes a few minutes.
               </p>
-              <Button className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90 h-11 px-6" onClick={() => { reset(); onClose(); navigate({ to: "/projects" }); }}>
+              <Button
+                className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90 h-11 px-6"
+                onClick={() => {
+                  const id = createdId;
+                  reset();
+                  onClose();
+                  if (id) navigate({ to: "/projects", search: { id } });
+                }}
+              >
                 <Sparkles className="h-4 w-4" />
                 Go to project
               </Button>
@@ -252,17 +289,24 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
                 Cancel
               </button>
             ) : (
-              <Button variant="outline" onClick={() => setStep((s) => (s - 1) as Step)}>
+              <Button variant="outline" onClick={() => setStep((s) => (s - 1) as Step)} disabled={creating}>
                 Back
               </Button>
             )}
-            <Button
-              className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6"
-              disabled={step === 1 && !name.trim()}
-              onClick={() => setStep((s) => (s + 1) as Step)}
-            >
-              {step === 3 ? "Create Project" : "Continue"}
-            </Button>
+            <div className="flex items-center gap-3">
+              {error && <span className="text-xs text-destructive">{error}</span>}
+              <Button
+                className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6"
+                disabled={(step === 1 && !name.trim()) || creating}
+                onClick={() => {
+                  if (step === 3) handleCreate();
+                  else setStep((s) => (s + 1) as Step);
+                }}
+              >
+                {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+                {step === 3 ? "Create Project" : "Continue"}
+              </Button>
+            </div>
           </div>
         )}
       </div>

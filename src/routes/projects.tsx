@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -20,15 +20,16 @@ import {
   Plus,
   ExternalLink,
 } from "lucide-react";
+import { getProject, type ConnectedSource, type Project, type ProjectMember } from "@/lib/projects";
 
 export const Route = createFileRoute("/projects")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "API Gateway Redesign — TeamMind" },
-      {
-        name: "description",
-        content: "Project knowledge for API Gateway Redesign.",
-      },
+      { title: "Project — TeamMind" },
+      { name: "description", content: "Project knowledge." },
     ],
   }),
   component: ProjectPage,
@@ -38,6 +39,7 @@ const sourceColors: Record<string, string> = {
   Slack: "#4A154B",
   Jira: "#2684FF",
   Drive: "#1FA463",
+  "Google Drive": "#1FA463",
   Confluence: "#172B4D",
 };
 
@@ -125,25 +127,21 @@ const statusColor = {
   green: "bg-success",
 };
 
-const connectedSources = [
-  { tool: "Slack" as const, name: "#api-gateway", indexed: "2 minutes ago" },
-  { tool: "Jira" as const, name: "PLAT board", indexed: "15 minutes ago" },
-  { tool: "Drive" as const, name: "API Gateway 2026", indexed: "1 hour ago" },
-  {
-    tool: "Confluence" as const,
-    name: "Platform / Gateway",
-    indexed: "3 hours ago",
-  },
-];
-
-const members = [
-  { name: "Aisha Mensah", initials: "AM", role: "Owner" },
-  { name: "Lena Park", initials: "LP", role: "Member" },
-  { name: "Marcus Okafor", initials: "MO", role: "Member" },
-  { name: "Priya Shah", initials: "PS", role: "Member" },
-  { name: "Ben Chen", initials: "BC", role: "Member" },
-  { name: "Rafael Hernandez", initials: "RH", role: "Member" },
-];
+function initialsOf(name: string | null | undefined) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.floor(h / 24);
+  return `${d} day${d === 1 ? "" : "s"} ago`;
+}
 
 const avatarPalette = ["#0F1C2E", "#00C9B1", "#6B7A90", "#12B76A", "#F79009", "#4A154B"];
 
@@ -154,7 +152,39 @@ const confidenceMeta = {
 };
 
 function ProjectPage() {
+  const { id } = Route.useSearch();
   const [tab, setTab] = useState<"answers" | "open">("answers");
+  const [project, setProject] = useState<Project | null>(null);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    getProject(id)
+      .then((d) => {
+        setProject(d.project);
+        setMembers(d.members);
+        setConnectedSources(d.sources);
+      })
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load project"));
+  }, [id]);
+
+  if (!id) {
+    return (
+      <AppShell>
+        <div className="text-sm text-muted-foreground">
+          No project selected. <Link to="/dashboard" className="text-accent underline">Go to dashboard</Link>.
+        </div>
+      </AppShell>
+    );
+  }
+  if (loadError) {
+    return <AppShell><div className="text-sm text-destructive">{loadError}</div></AppShell>;
+  }
+  if (!project) {
+    return <AppShell><div className="text-sm text-muted-foreground">Loading project…</div></AppShell>;
+  }
 
   return (
     <AppShell>
@@ -165,18 +195,18 @@ function ProjectPage() {
             {/* Header */}
             <div>
               <h1 className="font-heading text-3xl font-bold tracking-tight">
-                API Gateway Redesign
+                {project.name}
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                <SourcePill name="Slack" />
-                <SourcePill name="Jira" />
-                <SourcePill name="Drive" />
-                <SourcePill name="Confluence" />
+                {connectedSources.map((s) => (
+                  <SourcePill key={s.id} name={s.tool} />
+                ))}
                 <span className="text-xs text-muted-foreground ml-1">
-                  · 6 members
+                  · {members.length} member{members.length === 1 ? "" : "s"}
                 </span>
               </div>
             </div>
+
 
             {/* Ask box */}
             <div
@@ -347,18 +377,21 @@ function ProjectPage() {
                 Connected Sources
               </h3>
               <ul className="space-y-3">
+                {connectedSources.length === 0 && (
+                  <li className="text-xs text-muted-foreground">No sources connected.</li>
+                )}
                 {connectedSources.map((s) => (
-                  <li key={s.name} className="flex items-center gap-3">
+                  <li key={s.id} className="flex items-center gap-3">
                     <span
                       className="h-7 w-7 rounded-md flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                      style={{ background: sourceColors[s.tool] }}
+                      style={{ background: sourceColors[s.tool] ?? "#6B7A90" }}
                     >
                       {s.tool[0]}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name}</p>
+                      <p className="text-sm font-medium truncate">{s.label ?? s.tool}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        Indexed {s.indexed}
+                        {s.tool}
                       </p>
                     </div>
                     <span className="h-2 w-2 rounded-full bg-success shrink-0" />
@@ -376,30 +409,34 @@ function ProjectPage() {
                 Members
               </h3>
               <ul className="space-y-3">
-                {members.map((m, i) => (
-                  <li key={m.name} className="flex items-center gap-3">
-                    <span
-                      className="h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                      style={{ background: avatarPalette[i % avatarPalette.length] }}
-                    >
-                      {m.initials}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{m.name}</p>
-                    </div>
-                    <span
-                      className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${
-                        m.role === "Owner"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {m.role}
-                    </span>
-                  </li>
-                ))}
+                {members.map((m, i) => {
+                  const display = m.name || m.email || "Unknown";
+                  return (
+                    <li key={m.id} className="flex items-center gap-3">
+                      <span
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                        style={{ background: avatarPalette[i % avatarPalette.length] }}
+                      >
+                        {initialsOf(display)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{display}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${
+                          m.role === "owner"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {m.role}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
+
 
             {/* Project health */}
             <div
