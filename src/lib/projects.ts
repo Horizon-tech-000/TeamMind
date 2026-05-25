@@ -32,12 +32,12 @@ export type CreateProjectInput = {
 };
 
 export async function createProject(input: CreateProjectInput): Promise<string> {
-  const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !userData.user) {
-    console.error("[createProject] auth.getUser error:", userErr);
-    throw new Error("Not authenticated");
-  }
-  const uid = userData.user.id;
+  const { data: { session } } = await supabase.auth.getSession();
+  console.log("[createProject] Current session:", session);
+  console.log("[createProject] Current user:", session?.user);
+  if (!session) throw new Error("No active session found");
+
+  const uid = session.user.id;
   console.log("[createProject] starting as user", uid, "input:", input);
 
   const projectPayload = { name: input.name, description: input.description || null, owner_id: uid };
@@ -53,7 +53,7 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   }
   console.log("[createProject] created project:", project);
 
-  const ownerEmail = userData.user.email ?? null;
+  const ownerEmail = session.user.email ?? null;
   const memberRows = [
     { project_id: project.id, user_id: uid, email: ownerEmail, name: ownerEmail, role: "owner" as const },
     ...input.members.map((m) => ({
