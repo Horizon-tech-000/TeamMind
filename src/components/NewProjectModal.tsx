@@ -77,7 +77,9 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
       setCreatedId(id);
       setStep(4);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create project");
+      console.error("[NewProjectModal] createProject failed:", e);
+      const msg = e instanceof Error ? e.message : typeof e === "object" ? JSON.stringify(e) : String(e);
+      setError(msg);
     } finally {
       setCreating(false);
     }
