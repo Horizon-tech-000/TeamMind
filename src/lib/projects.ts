@@ -53,7 +53,7 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
   }
   console.log("[createProject] created project:", project);
 
-  const ownerEmail = userData.user.email ?? null;
+  const ownerEmail = session.user.email ?? null;
   const memberRows = [
     { project_id: project.id, user_id: uid, email: ownerEmail, name: ownerEmail, role: "owner" as const },
     ...input.members.map((m) => ({
