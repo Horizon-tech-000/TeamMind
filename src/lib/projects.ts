@@ -33,15 +33,25 @@ export type CreateProjectInput = {
 
 export async function createProject(input: CreateProjectInput): Promise<string> {
   const { data: userData, error: userErr } = await supabase.auth.getUser();
-  if (userErr || !userData.user) throw new Error("Not authenticated");
+  if (userErr || !userData.user) {
+    console.error("[createProject] auth.getUser error:", userErr);
+    throw new Error("Not authenticated");
+  }
   const uid = userData.user.id;
+  console.log("[createProject] starting as user", uid, "input:", input);
 
+  const projectPayload = { name: input.name, description: input.description || null, owner_id: uid };
+  console.log("[createProject] insert projects payload:", projectPayload);
   const { data: project, error: pErr } = await supabase
     .from("projects")
-    .insert({ name: input.name, description: input.description || null, owner_id: uid })
+    .insert(projectPayload)
     .select()
     .single();
-  if (pErr) throw pErr;
+  if (pErr) {
+    console.error("[createProject] projects insert error:", pErr);
+    throw new Error(`projects insert failed: ${pErr.message}`);
+  }
+  console.log("[createProject] created project:", project);
 
   const ownerEmail = userData.user.email ?? null;
   const memberRows = [
@@ -54,14 +64,21 @@ export async function createProject(input: CreateProjectInput): Promise<string> 
       role: "member" as const,
     })),
   ];
+  console.log("[createProject] insert project_members payload:", memberRows);
   const { error: mErr } = await supabase.from("project_members").insert(memberRows);
-  if (mErr) throw mErr;
+  if (mErr) {
+    console.error("[createProject] project_members insert error:", mErr);
+    throw new Error(`project_members insert failed: ${mErr.message}`);
+  }
 
   if (input.sources.length > 0) {
-    const { error: sErr } = await supabase.from("connected_sources").insert(
-      input.sources.map((s) => ({ project_id: project.id, tool: s.tool, label: s.label })),
-    );
-    if (sErr) throw sErr;
+    const sourceRows = input.sources.map((s) => ({ project_id: project.id, tool: s.tool, label: s.label }));
+    console.log("[createProject] insert connected_sources payload:", sourceRows);
+    const { error: sErr } = await supabase.from("connected_sources").insert(sourceRows);
+    if (sErr) {
+      console.error("[createProject] connected_sources insert error:", sErr);
+      throw new Error(`connected_sources insert failed: ${sErr.message}`);
+    }
   }
 
   return project.id;
