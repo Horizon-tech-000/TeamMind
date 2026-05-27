@@ -13,7 +13,7 @@ import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/"];
+const PUBLIC_ROUTES = ["/login", "/signup"];
 
 function NotFoundComponent() {
   return (
@@ -109,13 +109,18 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
+    if (pathname === "/") {
+      router.navigate({ to: user ? "/dashboard" : "/login", replace: true });
+      return;
+    }
     const isPublic = PUBLIC_ROUTES.includes(pathname);
     if (!user && !isPublic) {
-      router.navigate({ to: "/login" });
+      router.navigate({ to: "/login", replace: true });
     }
   }, [user, loading, pathname, router]);
 
   if (loading) return null;
+  if (pathname === "/") return null;
   const isPublic = PUBLIC_ROUTES.includes(pathname);
   if (!user && !isPublic) return null;
   return <>{children}</>;
