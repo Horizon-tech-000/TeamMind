@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { createProject } from "@/lib/projects";
+import { GoogleDriveFolderPickerModal } from "@/components/GoogleDriveFolderPickerModal";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -44,6 +45,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const [connected, setConnected] = useState<Record<SourceKey, boolean>>({
     slack: false, jira: false, drive: false, confluence: false,
   });
+  const [sourceLabels, setSourceLabels] = useState<Partial<Record<SourceKey, string>>>({});
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const reset = () => {
     setStep(1); setName(""); setDescription("");
     setConnected({ slack: false, jira: false, drive: false, confluence: false });
+    setSourceLabels({});
     setAdded([]); setError(null); setCreatedId(null);
   };
   const close = () => { reset(); onClose(); };
@@ -64,7 +68,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     try {
       const sourcesPayload = sources
         .filter((s) => connected[s.key])
-        .map((s) => ({ tool: s.name, label: s.connectedLabel }));
+        .map((s) => ({ tool: s.name, label: sourceLabels[s.key] ?? s.connectedLabel }));
       const membersPayload = added
         .map((id) => suggestedMembers.find((m) => m.id === id)!)
         .map((m) => ({ name: m.name, email: m.email }));
@@ -165,14 +169,20 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
                           {isConnected && (
                             <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-md">
                               <Check className="h-3.5 w-3.5" />
-                              Connected: {s.connectedLabel}
+                              Connected: {sourceLabels[s.key] ?? s.connectedLabel}
                             </div>
                           )}
                         </div>
                         <Button
                           variant={isConnected ? "outline" : "default"}
                           className={isConnected ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}
-                          onClick={() => setConnected((c) => ({ ...c, [s.key]: !c[s.key] }))}
+                          onClick={() => {
+                            if (s.key === "drive") {
+                              setDrivePickerOpen(true);
+                              return;
+                            }
+                            setConnected((c) => ({ ...c, [s.key]: !c[s.key] }));
+                          }}
                         >
                           {isConnected ? "Change" : "Connect"}
                         </Button>
@@ -312,6 +322,15 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           </div>
         )}
       </div>
+      <GoogleDriveFolderPickerModal
+        open={drivePickerOpen}
+        onClose={() => setDrivePickerOpen(false)}
+        onConfirm={(folderName) => {
+          setSourceLabels((l) => ({ ...l, drive: `${folderName}/` }));
+          setConnected((c) => ({ ...c, drive: true }));
+          setDrivePickerOpen(false);
+        }}
+      />
     </div>
   );
 }
