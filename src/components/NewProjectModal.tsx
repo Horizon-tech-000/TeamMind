@@ -169,14 +169,20 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
                           {isConnected && (
                             <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-md">
                               <Check className="h-3.5 w-3.5" />
-                              Connected: {s.connectedLabel}
+                              Connected: {sourceLabels[s.key] ?? s.connectedLabel}
                             </div>
                           )}
                         </div>
                         <Button
                           variant={isConnected ? "outline" : "default"}
                           className={isConnected ? "" : "bg-accent text-accent-foreground hover:bg-accent/90"}
-                          onClick={() => setConnected((c) => ({ ...c, [s.key]: !c[s.key] }))}
+                          onClick={() => {
+                            if (s.key === "drive") {
+                              setDrivePickerOpen(true);
+                              return;
+                            }
+                            setConnected((c) => ({ ...c, [s.key]: !c[s.key] }));
+                          }}
                         >
                           {isConnected ? "Change" : "Connect"}
                         </Button>
