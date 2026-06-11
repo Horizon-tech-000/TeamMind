@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { Bell, Search, Home, Folder, Flag, Settings, Shield, LogOut } from "lucide-react";
+import { Bell, Search, Home, Folder, Settings, Shield, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import {
@@ -14,7 +14,6 @@ import { useAuth } from "@/lib/auth-context";
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/projects", label: "My Projects", icon: Folder },
-  { to: "/flagged", label: "Flagged for Me", icon: Flag },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

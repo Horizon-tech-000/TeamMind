@@ -1,0 +1,3 @@
+# Copy to .dev.vars for Cloudflare Workers local dev (this file is gitignored).
+# Required for server-side Google OAuth token exchange:
+GOOGLE_CLIENT_SECRET=

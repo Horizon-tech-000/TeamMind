@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,24 @@ import {
   Info,
   Upload,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import {
+  deleteUserIntegration,
+  getUserIntegration,
+  GOOGLE_DRIVE_PROVIDER,
+  isIntegrationValid,
+} from "@/lib/integrations";
+import {
+  clearGoogleOAuthCallbackParams,
+  getGoogleClientId,
+  getGoogleRedirectUri,
+  readGoogleOAuthCallback,
+  startGoogleDriveOAuth,
+  validateGoogleOAuthState,
+} from "@/lib/google-oauth";
+import { connectGoogleDrive } from "@/lib/connect-google-drive";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -40,33 +57,144 @@ const toolColors: Record<string, string> = {
   Confluence: "#172B4D",
 };
 
+type ToolName = keyof typeof toolColors;
+
 type Tool = {
-  name: keyof typeof toolColors;
+  name: ToolName;
   status: "connected" | "disconnected";
   account?: string;
+  connectable: boolean;
 };
 
-const initialTools: Tool[] = [
-  { name: "Slack", status: "connected", account: "james@company.com" },
-  { name: "Jira", status: "connected", account: "james@company.com" },
-  { name: "Google Drive", status: "disconnected" },
-  { name: "Confluence", status: "disconnected" },
+const placeholderTools: Tool[] = [
+  { name: "Slack", status: "disconnected", connectable: false },
+  { name: "Jira", status: "disconnected", connectable: false },
+  { name: "Google Drive", status: "disconnected", connectable: true },
+  { name: "Confluence", status: "disconnected", connectable: false },
 ];
 
 function SettingsPage() {
   const [section, setSection] = useState<Section>("connections");
-  const [tools, setTools] = useState<Tool[]>(initialTools);
+  const [tools, setTools] = useState<Tool[]>(placeholderTools);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [googleActionLoading, setGoogleActionLoading] = useState(false);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
+  const [connectionsMessage, setConnectionsMessage] = useState<string | null>(null);
 
-  const toggleTool = (name: Tool["name"]) => {
+  const refreshGoogleDriveStatus = useCallback(async () => {
+    const integration = await getUserIntegration(GOOGLE_DRIVE_PROVIDER);
+    const connected = isIntegrationValid(integration);
+
     setTools((prev) =>
-      prev.map((t) =>
-        t.name === name
-          ? t.status === "connected"
-            ? { ...t, status: "disconnected", account: undefined }
-            : { ...t, status: "connected", account: "james@company.com" }
-          : t,
+      prev.map((tool) =>
+        tool.name === "Google Drive"
+          ? {
+              ...tool,
+              status: connected ? "connected" : "disconnected",
+              account: connected ? "Google account linked" : undefined,
+            }
+          : tool,
       ),
     );
+  }, []);
+
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    setConnectionsError(null);
+    try {
+      await refreshGoogleDriveStatus();
+    } catch (error) {
+      setConnectionsError(error instanceof Error ? error.message : "Could not load connected accounts.");
+    } finally {
+      setConnectionsLoading(false);
+    }
+  }, [refreshGoogleDriveStatus]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  useEffect(() => {
+    const callback = readGoogleOAuthCallback();
+    if (!callback) return;
+
+    void (async () => {
+      setGoogleActionLoading(true);
+      setConnectionsError(null);
+      setConnectionsMessage(null);
+
+      try {
+        if (!validateGoogleOAuthState(callback.state)) {
+          throw new Error("Google sign-in could not be verified. Please try connecting again.");
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) {
+          throw new Error("You must be logged in to connect Google Drive.");
+        }
+
+        await connectGoogleDrive({
+          data: {
+            code: callback.code,
+            redirectUri: getGoogleRedirectUri(),
+            accessToken,
+          },
+        });
+
+        clearGoogleOAuthCallbackParams();
+        await refreshGoogleDriveStatus();
+        setConnectionsMessage("Google Drive connected successfully.");
+      } catch (error) {
+        clearGoogleOAuthCallbackParams();
+        setConnectionsError(error instanceof Error ? error.message : "Could not connect Google Drive.");
+      } finally {
+        setGoogleActionLoading(false);
+      }
+    })();
+  }, [refreshGoogleDriveStatus]);
+
+  const handleConnectGoogleDrive = () => {
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+
+    if (!getGoogleClientId()) {
+      setConnectionsError("Google OAuth is not configured. Add VITE_GOOGLE_CLIENT_ID to your environment.");
+      return;
+    }
+
+    try {
+      startGoogleDriveOAuth();
+    } catch (error) {
+      setConnectionsError(error instanceof Error ? error.message : "Could not start Google sign-in.");
+    }
+  };
+
+  const handleDisconnectGoogleDrive = async () => {
+    setGoogleActionLoading(true);
+    setConnectionsError(null);
+    setConnectionsMessage(null);
+
+    try {
+      await deleteUserIntegration(GOOGLE_DRIVE_PROVIDER);
+      await refreshGoogleDriveStatus();
+      setConnectionsMessage("Google Drive disconnected.");
+    } catch (error) {
+      setConnectionsError(error instanceof Error ? error.message : "Could not disconnect Google Drive.");
+    } finally {
+      setGoogleActionLoading(false);
+    }
+  };
+
+  const handleToolAction = (name: ToolName) => {
+    if (name === "Google Drive") {
+      const googleDrive = tools.find((tool) => tool.name === "Google Drive");
+      if (googleDrive?.status === "connected") {
+        void handleDisconnectGoogleDrive();
+      } else {
+        handleConnectGoogleDrive();
+      }
+    }
   };
 
   return (
@@ -77,7 +205,6 @@ function SettingsPage() {
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-8">
-          {/* Secondary nav */}
           <nav className="space-y-1">
             {nav.map((n) => {
               const active = section === n.id;
@@ -99,10 +226,15 @@ function SettingsPage() {
             })}
           </nav>
 
-          {/* Content */}
           <div>
             {section === "connections" && (
-              <Connections tools={tools} onToggle={toggleTool} />
+              <Connections
+                tools={tools}
+                loading={connectionsLoading || googleActionLoading}
+                error={connectionsError}
+                message={connectionsMessage}
+                onAction={handleToolAction}
+              />
             )}
             {section === "profile" && <Profile />}
             {section === "notifications" && (
@@ -137,10 +269,16 @@ function Card({ children }: { children: React.ReactNode }) {
 
 function Connections({
   tools,
-  onToggle,
+  loading,
+  error,
+  message,
+  onAction,
 }: {
   tools: Tool[];
-  onToggle: (name: Tool["name"]) => void;
+  loading: boolean;
+  error: string | null;
+  message: string | null;
+  onAction: (name: ToolName) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -152,10 +290,25 @@ function Connections({
         </p>
       </div>
 
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div className="rounded-xl border border-success/30 bg-success/10 p-4 text-sm text-success">
+          {message}
+        </div>
+      )}
+
       <Card>
         <ul className="divide-y divide-border -my-2">
           {tools.map((t) => {
             const connected = t.status === "connected";
+            const isGoogleDrive = t.name === "Google Drive";
+            const actionDisabled = loading || (!t.connectable && !connected);
+
             return (
               <li key={t.name} className="flex items-center gap-4 py-4">
                 <span
@@ -167,7 +320,7 @@ function Connections({
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">{t.name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {connected ? `Connected as ${t.account}` : "Not connected"}
+                    {connected ? (t.account ?? "Connected") : "Not connected"}
                   </p>
                 </div>
                 <span
@@ -181,18 +334,29 @@ function Connections({
                 </span>
                 {connected ? (
                   <button
-                    onClick={() => onToggle(t.name)}
-                    className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors w-24 text-right"
+                    onClick={() => onAction(t.name)}
+                    disabled={actionDisabled || !isGoogleDrive}
+                    className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors w-24 text-right disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Disconnect
+                    {loading && isGoogleDrive ? "Working…" : "Disconnect"}
                   </button>
                 ) : (
                   <Button
                     size="sm"
-                    onClick={() => onToggle(t.name)}
+                    onClick={() => onAction(t.name)}
+                    disabled={actionDisabled}
                     className="bg-accent text-accent-foreground hover:bg-accent/90 h-8 w-24"
                   >
-                    Connect
+                    {loading && isGoogleDrive ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Working
+                      </>
+                    ) : t.connectable ? (
+                      "Connect"
+                    ) : (
+                      "Soon"
+                    )}
                   </Button>
                 )}
               </li>
@@ -209,11 +373,20 @@ function Connections({
         }}
       >
         <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#2684FF" }} />
-        <p className="text-xs leading-relaxed text-foreground">
-          When you connect a tool, TeamMind only accesses content within the
-          specific channels, boards, or folders you add to a project. We never
-          index your entire account.
-        </p>
+        <div className="text-xs leading-relaxed text-foreground space-y-2">
+          <p>
+            When you connect Google Drive, TeamMind requests read-only access so it
+            can search files you already have permission to view.
+          </p>
+          <p>
+            If Google shows <strong>redirect_uri_mismatch</strong>, add this exact
+            URL in Google Cloud Console → Credentials → your OAuth client →{" "}
+            <strong>Authorized redirect URIs</strong>:
+          </p>
+          <code className="block rounded-md border border-border bg-background px-2 py-1.5 text-[11px] break-all">
+            {getGoogleRedirectUri() || "Open Settings in your browser to see the redirect URI"}
+          </code>
+        </div>
       </div>
     </div>
   );

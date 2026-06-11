@@ -12,6 +12,7 @@ import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { hasSupabaseEnvConfig, supabaseEnvErrorMessage } from "@/lib/supabase";
 
 const PUBLIC_ROUTES = ["/login", "/signup"];
 
@@ -128,6 +129,30 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  if (!hasSupabaseEnvConfig) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 text-left shadow-[var(--shadow-card)]">
+          <h1 className="text-xl font-semibold text-foreground">
+            Supabase configuration is missing
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {supabaseEnvErrorMessage}
+          </p>
+          <div className="mt-4 rounded-md border border-border bg-background p-4">
+            <p className="text-sm text-foreground">
+              Add the missing values in your environment configuration and restart the preview:
+            </p>
+            <pre className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
+{`VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=`}
+            </pre>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

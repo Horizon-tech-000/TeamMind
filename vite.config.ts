@@ -12,4 +12,8 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  vite: {
+    // Allow GOOGLE_CLIENT_SECRET from .env in server bundles (used only in server functions).
+    envPrefix: ["VITE_", "GOOGLE_"],
+  },
 });
