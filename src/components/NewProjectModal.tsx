@@ -322,6 +322,15 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
           </div>
         )}
       </div>
+      <GoogleDriveFolderPickerModal
+        open={drivePickerOpen}
+        onClose={() => setDrivePickerOpen(false)}
+        onConfirm={(folderName) => {
+          setSourceLabels((l) => ({ ...l, drive: `${folderName}/` }));
+          setConnected((c) => ({ ...c, drive: true }));
+          setDrivePickerOpen(false);
+        }}
+      />
     </div>
   );
 }
