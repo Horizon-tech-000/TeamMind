@@ -68,7 +68,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
     try {
       const sourcesPayload = sources
         .filter((s) => connected[s.key])
-        .map((s) => ({ tool: s.name, label: s.connectedLabel }));
+        .map((s) => ({ tool: s.name, label: sourceLabels[s.key] ?? s.connectedLabel }));
       const membersPayload = added
         .map((id) => suggestedMembers.find((m) => m.id === id)!)
         .map((m) => ({ name: m.name, email: m.email }));
