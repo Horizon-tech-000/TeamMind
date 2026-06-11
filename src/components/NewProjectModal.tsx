@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { createProject } from "@/lib/projects";
+import { GoogleDriveFolderPickerModal } from "@/components/GoogleDriveFolderPickerModal";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -44,6 +45,8 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const [connected, setConnected] = useState<Record<SourceKey, boolean>>({
     slack: false, jira: false, drive: false, confluence: false,
   });
+  const [sourceLabels, setSourceLabels] = useState<Partial<Record<SourceKey, string>>>({});
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   const reset = () => {
     setStep(1); setName(""); setDescription("");
     setConnected({ slack: false, jira: false, drive: false, confluence: false });
+    setSourceLabels({});
     setAdded([]); setError(null); setCreatedId(null);
   };
   const close = () => { reset(); onClose(); };
