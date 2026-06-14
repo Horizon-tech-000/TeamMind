@@ -20,16 +20,18 @@ create index if not exists questions_status_idx on public.questions (status);
 alter table public.questions enable row level security;
 
 -- Users can see questions in projects they belong to
+drop policy if exists "Members can view project questions" on public.questions;
 create policy "Members can view project questions"
   on public.questions for select
   using (
     exists (
       select 1 from public.project_members pm
       where pm.project_id = questions.project_id
-        and (pm.user_id = auth.uid() or pm.email = (select email from auth.users where id = auth.uid()))
+        and (pm.user_id = auth.uid() or pm.email = (auth.jwt() ->> 'email'))
     )
   );
 
+drop policy if exists "Members can insert questions" on public.questions;
 create policy "Members can insert questions"
   on public.questions for insert
   with check (
@@ -37,14 +39,16 @@ create policy "Members can insert questions"
     and exists (
       select 1 from public.project_members pm
       where pm.project_id = questions.project_id
-        and (pm.user_id = auth.uid() or pm.email = (select email from auth.users where id = auth.uid()))
+        and (pm.user_id = auth.uid() or pm.email = (auth.jwt() ->> 'email'))
     )
   );
 
+drop policy if exists "Owners can update questions" on public.questions;
 create policy "Owners can update questions"
   on public.questions for update
   using (auth.uid() = user_id);
 
+drop policy if exists "Owners can delete questions" on public.questions;
 create policy "Owners can delete questions"
   on public.questions for delete
   using (auth.uid() = user_id);
@@ -65,23 +69,25 @@ create index if not exists answers_project_id_idx on public.answers (project_id)
 
 alter table public.answers enable row level security;
 
+drop policy if exists "Members can view project answers" on public.answers;
 create policy "Members can view project answers"
   on public.answers for select
   using (
     exists (
       select 1 from public.project_members pm
       where pm.project_id = answers.project_id
-        and (pm.user_id = auth.uid() or pm.email = (select email from auth.users where id = auth.uid()))
+        and (pm.user_id = auth.uid() or pm.email = (auth.jwt() ->> 'email'))
     )
   );
 
+drop policy if exists "System can insert answers" on public.answers;
 create policy "System can insert answers"
   on public.answers for insert
   with check (
     exists (
       select 1 from public.project_members pm
       where pm.project_id = answers.project_id
-        and (pm.user_id = auth.uid() or pm.email = (select email from auth.users where id = auth.uid()))
+        and (pm.user_id = auth.uid() or pm.email = (auth.jwt() ->> 'email'))
     )
   );
 
@@ -99,19 +105,23 @@ create index if not exists answer_feedback_answer_id_idx on public.answer_feedba
 
 alter table public.answer_feedback enable row level security;
 
+drop policy if exists "Members can view feedback" on public.answer_feedback;
 create policy "Members can view feedback"
   on public.answer_feedback for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert own feedback" on public.answer_feedback;
 create policy "Users can insert own feedback"
   on public.answer_feedback for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update own feedback" on public.answer_feedback;
 create policy "Users can update own feedback"
   on public.answer_feedback for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users can delete own feedback" on public.answer_feedback;
 create policy "Users can delete own feedback"
   on public.answer_feedback for delete
   using (auth.uid() = user_id);

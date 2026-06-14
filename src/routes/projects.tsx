@@ -158,7 +158,7 @@ function ProjectPage() {
       listOpenQuestions(id).then(setOpenQs).catch(() => {});
       getProjectStats(id).then(setStats).catch(() => {});
     } catch (e) {
-      // Silently handle — could add toast here
+      alert(e instanceof Error ? e.message : "Failed to ask question.");
     } finally {
       setAsking(false);
     }
