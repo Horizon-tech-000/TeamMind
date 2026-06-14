@@ -125,3 +125,9 @@ drop policy if exists "Users can delete own feedback" on public.answer_feedback;
 create policy "Users can delete own feedback"
   on public.answer_feedback for delete
   using (auth.uid() = user_id);
+
+-- ─── Grants ──────────────────────────────────────────────────
+GRANT ALL ON TABLE public.questions TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.answers TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.answer_feedback TO anon, authenticated, service_role;
+
