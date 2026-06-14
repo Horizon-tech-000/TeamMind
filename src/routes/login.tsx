@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -23,7 +24,29 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  
+  const handleResetPassword = async () => {
+    if (!email) {
+      setError("Please enter your email address to reset password.");
+      return;
+    }
+    setError(null);
+    setMsg(null);
+    setResetLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/settings`,
+    });
+    setResetLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setMsg("Password reset email sent. Check your inbox.");
+    }
+  };
+
   return (
     <AuthLayout>
       <div>
@@ -55,13 +78,20 @@ function LoginPage() {
             </div>
             <Input id="password" type="password" placeholder="••••••••" required value={password} onChange={(e) => setPassword(e.target.value)} />
             <div className="flex justify-end">
-              <a href="#" className="text-xs text-accent hover:underline font-medium">
+              <button 
+                type="button" 
+                onClick={handleResetPassword}
+                disabled={resetLoading}
+                className="text-xs text-accent hover:underline font-medium inline-flex items-center gap-1 disabled:opacity-50"
+              >
+                {resetLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 Forgot password?
-              </a>
+              </button>
             </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {msg && <p className="text-sm text-success">{msg}</p>}
 
           <Button
             type="submit"

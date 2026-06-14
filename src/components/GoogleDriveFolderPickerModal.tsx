@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Folder, Loader2, X, Check } from "lucide-react";
+import { Folder, Loader2, X, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
+import { getUserIntegration } from "@/lib/integrations";
 
 type DriveFolder = { id: string; name: string };
 
@@ -15,6 +17,34 @@ const MOCK_FOLDERS: DriveFolder[] = [
   { id: "8", name: "Meeting Notes" },
 ];
 
+async function fetchDriveFolders(accessToken: string): Promise<DriveFolder[]> {
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/drive/v3/files?" +
+        new URLSearchParams({
+          q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+          fields: "files(id,name)",
+          orderBy: "name",
+          pageSize: "50",
+        }).toString(),
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+
+    if (!res.ok) {
+      console.warn("Drive API error:", res.status, await res.text());
+      return [];
+    }
+
+    const data = (await res.json()) as { files: DriveFolder[] };
+    return data.files ?? [];
+  } catch (err) {
+    console.warn("Failed to fetch Drive folders:", err);
+    return [];
+  }
+}
+
 export function GoogleDriveFolderPickerModal({
   open,
   onClose,
@@ -27,17 +57,36 @@ export function GoogleDriveFolderPickerModal({
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState<DriveFolder[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [usingMock, setUsingMock] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setSelectedId(null);
     setFolders([]);
-    const t = setTimeout(() => {
+    setUsingMock(false);
+
+    // Try to use real Google Drive API first
+    (async () => {
+      try {
+        const integration = await getUserIntegration("google_drive");
+        if (integration?.access_token) {
+          const realFolders = await fetchDriveFolders(integration.access_token);
+          if (realFolders.length > 0) {
+            setFolders(realFolders);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Fall through to mock
+      }
+
+      // Fall back to mock data if Drive API isn't available
+      setUsingMock(true);
       setFolders(MOCK_FOLDERS);
       setLoading(false);
-    }, 900);
-    return () => clearTimeout(t);
+    })();
   }, [open]);
 
   if (!open) return null;
@@ -60,11 +109,27 @@ export function GoogleDriveFolderPickerModal({
           </button>
         </div>
 
+        {usingMock && (
+          <div className="px-6 pt-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              Showing sample folders. Connect Google Drive in{" "}
+              <a href="/settings" className="text-accent underline">Settings</a>{" "}
+              to see your real folders.
+            </p>
+          </div>
+        )}
+
         <div className="px-3 py-3 max-h-[420px] min-h-[280px] overflow-y-auto">
           {loading ? (
             <div className="h-[280px] flex flex-col items-center justify-center text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin" />
               <p className="mt-3 text-sm">Loading your folders…</p>
+            </div>
+          ) : folders.length === 0 ? (
+            <div className="h-[280px] flex flex-col items-center justify-center text-muted-foreground">
+              <Folder className="h-8 w-8 mb-3" />
+              <p className="text-sm">No folders found in your Google Drive.</p>
             </div>
           ) : (
             <ul className="space-y-1">

@@ -30,6 +30,23 @@ import {
   validateGoogleOAuthState,
 } from "@/lib/google-oauth";
 import { connectGoogleDrive } from "@/lib/connect-google-drive";
+import {
+  startSlackOAuth,
+  readSlackOAuthCallback,
+  validateSlackOAuthState,
+  clearSlackOAuthCallbackParams,
+  getSlackClientId,
+} from "@/lib/slack-oauth";
+import { connectSlack } from "@/lib/connect-slack";
+import {
+  startJiraOAuth,
+  startConfluenceOAuth,
+  readAtlassianOAuthCallback,
+  clearAtlassianOAuthCallbackParams,
+  getAtlassianClientId,
+} from "@/lib/atlassian-oauth";
+import { connectAtlassian } from "@/lib/connect-atlassian";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -67,10 +84,10 @@ type Tool = {
 };
 
 const placeholderTools: Tool[] = [
-  { name: "Slack", status: "disconnected", connectable: false },
-  { name: "Jira", status: "disconnected", connectable: false },
+  { name: "Slack", status: "disconnected", connectable: true },
+  { name: "Jira", status: "disconnected", connectable: true },
   { name: "Google Drive", status: "disconnected", connectable: true },
-  { name: "Confluence", status: "disconnected", connectable: false },
+  { name: "Confluence", status: "disconnected", connectable: true },
 ];
 
 function SettingsPage() {
@@ -81,20 +98,29 @@ function SettingsPage() {
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [connectionsMessage, setConnectionsMessage] = useState<string | null>(null);
 
-  const refreshGoogleDriveStatus = useCallback(async () => {
-    const integration = await getUserIntegration(GOOGLE_DRIVE_PROVIDER);
-    const connected = isIntegrationValid(integration);
+  const refreshConnectionsStatus = useCallback(async () => {
+    const [drive, slack, jira, confluence] = await Promise.all([
+      getUserIntegration(GOOGLE_DRIVE_PROVIDER),
+      getUserIntegration("slack"),
+      getUserIntegration("jira"),
+      getUserIntegration("confluence"),
+    ]);
 
     setTools((prev) =>
-      prev.map((tool) =>
-        tool.name === "Google Drive"
-          ? {
-              ...tool,
-              status: connected ? "connected" : "disconnected",
-              account: connected ? "Google account linked" : undefined,
-            }
-          : tool,
-      ),
+      prev.map((tool) => {
+        let connected = false;
+        let accountStr: string | undefined = undefined;
+        if (tool.name === "Google Drive") { connected = isIntegrationValid(drive); accountStr = "Google account linked"; }
+        if (tool.name === "Slack") { connected = isIntegrationValid(slack); accountStr = "Slack workspace linked"; }
+        if (tool.name === "Jira") { connected = isIntegrationValid(jira); accountStr = "Jira account linked"; }
+        if (tool.name === "Confluence") { connected = isIntegrationValid(confluence); accountStr = "Confluence account linked"; }
+        
+        return {
+          ...tool,
+          status: connected ? "connected" : "disconnected",
+          account: connected ? accountStr : undefined,
+        };
+      }),
     );
   }, []);
 
@@ -102,21 +128,24 @@ function SettingsPage() {
     setConnectionsLoading(true);
     setConnectionsError(null);
     try {
-      await refreshGoogleDriveStatus();
+      await refreshConnectionsStatus();
     } catch (error) {
       setConnectionsError(error instanceof Error ? error.message : "Could not load connected accounts.");
     } finally {
       setConnectionsLoading(false);
     }
-  }, [refreshGoogleDriveStatus]);
+  }, [refreshConnectionsStatus]);
 
   useEffect(() => {
     void loadConnections();
   }, [loadConnections]);
 
   useEffect(() => {
-    const callback = readGoogleOAuthCallback();
-    if (!callback) return;
+    const googleCallback = readGoogleOAuthCallback();
+    const slackCallback = readSlackOAuthCallback();
+    const atlassianCallback = readAtlassianOAuthCallback();
+    
+    if (!googleCallback && !slackCallback && !atlassianCallback) return;
 
     void (async () => {
       setGoogleActionLoading(true);
@@ -124,76 +153,87 @@ function SettingsPage() {
       setConnectionsMessage(null);
 
       try {
-        if (!validateGoogleOAuthState(callback.state)) {
-          throw new Error("Google sign-in could not be verified. Please try connecting again.");
-        }
-
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData.session?.access_token;
-        if (!accessToken) {
-          throw new Error("You must be logged in to connect Google Drive.");
+        if (!accessToken) throw new Error("You must be logged in to connect accounts.");
+
+        if (googleCallback) {
+          if (!validateGoogleOAuthState(googleCallback.state)) throw new Error("Google sign-in could not be verified.");
+          await connectGoogleDrive({ data: { code: googleCallback.code, redirectUri: getGoogleRedirectUri(), accessToken } });
+          clearGoogleOAuthCallbackParams();
+          setConnectionsMessage("Google Drive connected successfully.");
+        } else if (slackCallback) {
+          if (!validateSlackOAuthState(slackCallback.state)) throw new Error("Slack sign-in could not be verified.");
+          await connectSlack({ data: { code: slackCallback.code, redirectUri: `${window.location.origin}/settings`, accessToken } });
+          clearSlackOAuthCallbackParams();
+          setConnectionsMessage("Slack connected successfully.");
+        } else if (atlassianCallback) {
+          await connectAtlassian({ data: { code: atlassianCallback.code, redirectUri: `${window.location.origin}/settings`, provider: atlassianCallback.provider, accessToken } });
+          clearAtlassianOAuthCallbackParams();
+          setConnectionsMessage(`${atlassianCallback.provider === 'jira' ? 'Jira' : 'Confluence'} connected successfully.`);
         }
 
-        await connectGoogleDrive({
-          data: {
-            code: callback.code,
-            redirectUri: getGoogleRedirectUri(),
-            accessToken,
-          },
-        });
-
-        clearGoogleOAuthCallbackParams();
-        await refreshGoogleDriveStatus();
-        setConnectionsMessage("Google Drive connected successfully.");
+        await refreshConnectionsStatus();
       } catch (error) {
         clearGoogleOAuthCallbackParams();
-        setConnectionsError(error instanceof Error ? error.message : "Could not connect Google Drive.");
+        clearSlackOAuthCallbackParams();
+        clearAtlassianOAuthCallbackParams();
+        setConnectionsError(error instanceof Error ? error.message : "Could not connect account.");
       } finally {
         setGoogleActionLoading(false);
       }
     })();
-  }, [refreshGoogleDriveStatus]);
+  }, [refreshConnectionsStatus]);
 
-  const handleConnectGoogleDrive = () => {
+  const handleConnect = (name: ToolName) => {
     setConnectionsError(null);
     setConnectionsMessage(null);
-
-    if (!getGoogleClientId()) {
-      setConnectionsError("Google OAuth is not configured. Add VITE_GOOGLE_CLIENT_ID to your environment.");
-      return;
-    }
-
     try {
-      startGoogleDriveOAuth();
+      if (name === "Google Drive") {
+        if (!getGoogleClientId()) throw new Error("Google OAuth is not configured. Add VITE_GOOGLE_CLIENT_ID to your environment.");
+        startGoogleDriveOAuth();
+      } else if (name === "Slack") {
+        if (!getSlackClientId()) throw new Error("Slack OAuth is not configured. Add VITE_SLACK_CLIENT_ID to your environment.");
+        startSlackOAuth();
+      } else if (name === "Jira") {
+        if (!getAtlassianClientId()) throw new Error("Atlassian OAuth is not configured. Add VITE_ATLASSIAN_CLIENT_ID to your environment.");
+        startJiraOAuth();
+      } else if (name === "Confluence") {
+        if (!getAtlassianClientId()) throw new Error("Atlassian OAuth is not configured. Add VITE_ATLASSIAN_CLIENT_ID to your environment.");
+        startConfluenceOAuth();
+      }
     } catch (error) {
-      setConnectionsError(error instanceof Error ? error.message : "Could not start Google sign-in.");
+      setConnectionsError(error instanceof Error ? error.message : `Could not start ${name} sign-in.`);
     }
   };
 
-  const handleDisconnectGoogleDrive = async () => {
+  const handleDisconnect = async (name: ToolName) => {
     setGoogleActionLoading(true);
     setConnectionsError(null);
     setConnectionsMessage(null);
-
     try {
-      await deleteUserIntegration(GOOGLE_DRIVE_PROVIDER);
-      await refreshGoogleDriveStatus();
-      setConnectionsMessage("Google Drive disconnected.");
+      const providerMap: Record<ToolName, string> = {
+        "Google Drive": GOOGLE_DRIVE_PROVIDER,
+        Slack: "slack",
+        Jira: "jira",
+        Confluence: "confluence",
+      };
+      await deleteUserIntegration(providerMap[name]);
+      await refreshConnectionsStatus();
+      setConnectionsMessage(`${name} disconnected.`);
     } catch (error) {
-      setConnectionsError(error instanceof Error ? error.message : "Could not disconnect Google Drive.");
+      setConnectionsError(error instanceof Error ? error.message : `Could not disconnect ${name}.`);
     } finally {
       setGoogleActionLoading(false);
     }
   };
 
   const handleToolAction = (name: ToolName) => {
-    if (name === "Google Drive") {
-      const googleDrive = tools.find((tool) => tool.name === "Google Drive");
-      if (googleDrive?.status === "connected") {
-        void handleDisconnectGoogleDrive();
-      } else {
-        handleConnectGoogleDrive();
-      }
+    const tool = tools.find((t) => t.name === name);
+    if (tool?.status === "connected") {
+      void handleDisconnect(name);
+    } else {
+      handleConnect(name);
     }
   };
 
@@ -335,10 +375,10 @@ function Connections({
                 {connected ? (
                   <button
                     onClick={() => onAction(t.name)}
-                    disabled={actionDisabled || !isGoogleDrive}
+                    disabled={actionDisabled}
                     className="text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors w-24 text-right disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading && isGoogleDrive ? "Working…" : "Disconnect"}
+                    {loading ? "Working…" : "Disconnect"}
                   </button>
                 ) : (
                   <Button
@@ -347,10 +387,10 @@ function Connections({
                     disabled={actionDisabled}
                     className="bg-accent text-accent-foreground hover:bg-accent/90 h-8 w-24"
                   >
-                    {loading && isGoogleDrive ? (
+                    {loading ? (
                       <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Working
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                        Wait
                       </>
                     ) : t.connectable ? (
                       "Connect"
@@ -393,6 +433,31 @@ function Connections({
 }
 
 function Profile() {
+  const { user } = useAuth();
+  const [name, setName] = useState(user?.user_metadata?.full_name || "");
+  const [title, setTitle] = useState(user?.user_metadata?.job_title || "");
+  const [company, setCompany] = useState(user?.user_metadata?.company || "");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{type: "success" | "error", text: string} | null>(null);
+
+  const displayInitials = name 
+    ? name.split(/\s+/).map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user?.email?.slice(0, 2).toUpperCase() || "AM";
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMsg(null);
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: name, job_title: title, company: company }
+    });
+    setSaving(false);
+    if (error) {
+      setMsg({ type: "error", text: error.message });
+    } else {
+      setMsg({ type: "success", text: "Profile updated successfully." });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -402,17 +467,23 @@ function Profile() {
         </p>
       </div>
 
+      {msg && (
+        <div className={`rounded-xl border p-4 text-sm ${msg.type === "error" ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-success/30 bg-success/10 text-success"}`}>
+          {msg.text}
+        </div>
+      )}
+
       <Card>
         <div className="flex items-center gap-5 pb-6 border-b border-border">
           <span
             className="h-16 w-16 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0"
             style={{ background: "#0F1C2E" }}
           >
-            JM
+            {displayInitials}
           </span>
           <div>
             <Button variant="outline" size="sm" className="h-9">
-              <Upload className="h-4 w-4" />
+              <Upload className="h-4 w-4 mr-2" />
               Upload photo
             </Button>
             <p className="text-[11px] text-muted-foreground mt-2">
@@ -423,7 +494,7 @@ function Profile() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-6">
           <Field label="Full name">
-            <Input defaultValue="James Mitchell" />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Doe" />
           </Field>
           <Field
             label="Work email"
@@ -435,22 +506,26 @@ function Profile() {
           >
             <Input
               readOnly
-              defaultValue="james@company.com"
+              value={user?.email || ""}
               className="bg-muted/40 cursor-not-allowed"
             />
           </Field>
           <Field label="Job title">
-            <Input defaultValue="Staff Platform Engineer" />
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Staff Engineer" />
           </Field>
           <Field label="Company">
-            <Input defaultValue="Acme Corp" />
+            <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" />
           </Field>
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-border">
           <Button variant="ghost">Cancel</Button>
-          <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
-            <CheckCircle2 className="h-4 w-4" />
+          <Button 
+            className="bg-accent text-accent-foreground hover:bg-accent/90"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
             Save changes
           </Button>
         </div>

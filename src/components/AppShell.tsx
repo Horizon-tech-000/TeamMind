@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useCallback } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { Bell, Search, Home, Folder, Settings, Shield, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -40,8 +40,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex-1 max-w-2xl mx-auto relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search across all your projects…"
+            placeholder="Search across all your projects… (press Enter)"
             className="pl-9 h-10 bg-background border-border"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const query = (e.target as HTMLInputElement).value.trim();
+                if (query) {
+                  navigate({ to: "/dashboard", search: { q: query } });
+                }
+              }
+            }}
           />
         </div>
         <div className="flex items-center gap-4 shrink-0">

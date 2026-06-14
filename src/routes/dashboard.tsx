@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Plus, Sparkles, Flag, ExternalLink } from "lucide-react";
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { listMyProjects, type Project } from "@/lib/projects";
+import {
+  listRecentAnswers,
+  listFlaggedQuestions,
+  type AnswerWithQuestion,
+  type Question,
+} from "@/lib/questions";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -19,58 +25,38 @@ export const Route = createFileRoute("/dashboard")({
 const projectColors = ["#00C9B1", "#F04438", "#F79009", "#4A154B", "#2684FF", "#12B76A"];
 const avatarColors = ["#0F1C2E", "#00C9B1", "#6B7A90", "#12B76A"];
 
-const captured = [
-  {
-    summary:
-      "Decision: Postgres chosen over MongoDB for the API gateway database — see thread",
-    sources: ["Slack #platform-team"],
-    confidence: "high" as const,
-    time: "1h ago",
-  },
-  {
-    summary:
-      "New runbook published for handling Cloudflare 522 errors during deploys",
-    sources: ["Confluence", "Google Drive"],
-    confidence: "medium" as const,
-    time: "3h ago",
-  },
-  {
-    summary:
-      "Jira PLAT-482 closed — SSO rollout to engineering org completed without incident",
-    sources: ["Jira", "Slack #sso-rollout"],
-    confidence: "high" as const,
-    time: "yesterday",
-  },
-];
-
-const flagged = [
-  {
-    question: "Why did we drop Kafka in favour of NATS for the event bus?",
-    asker: "Priya Shah",
-    project: "Platform Migration Q3",
-  },
-  {
-    question:
-      "What's the rollback procedure if the new auth gateway fails in prod?",
-    asker: "Marcus Okafor",
-    project: "Security Incident Response",
-  },
-];
-
-const confidenceStyles = {
+const confidenceStyles: Record<string, string> = {
   high: "bg-success/10 text-success border-success/20",
   medium: "bg-warning/10 text-warning border-warning/20",
   low: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
-const confidenceLabel = { high: "High", medium: "Medium", low: "Low" };
+const confidenceLabel: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
+
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = Math.max(0, now - then);
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
 
 function DashboardPage() {
   const [showNew, setShowNew] = useState(false);
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [recentAnswers, setRecentAnswers] = useState<AnswerWithQuestion[] | null>(null);
+  const [flaggedQs, setFlaggedQs] = useState<(Question & { project_name?: string })[] | null>(null);
 
   const load = () => {
     listMyProjects().then(setProjects).catch(() => setProjects([]));
+    listRecentAnswers().then(setRecentAnswers).catch(() => setRecentAnswers([]));
+    listFlaggedQuestions().then(setFlaggedQs).catch(() => setFlaggedQs([]));
   };
   useEffect(() => { load(); }, []);
 
@@ -156,41 +142,54 @@ function DashboardPage() {
           <h2 className="font-heading text-xl font-semibold mb-4">
             Knowledge captured while you were away
           </h2>
-          <div className="space-y-3">
-            {captured.map((c, i) => (
-              <div
-                key={i}
-                className="bg-card rounded-xl border border-border p-5 flex gap-4"
-                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
-              >
-                <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                  <Sparkles className="h-4 w-4 text-accent" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm leading-relaxed">{c.summary}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    {c.sources.map((s) => (
+          {recentAnswers === null ? (
+            <div className="text-sm text-muted-foreground">Loading recent knowledge…</div>
+          ) : recentAnswers.length === 0 ? (
+            <div
+              className="bg-card rounded-xl border border-dashed border-border p-10 text-center"
+              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+            >
+              <p className="text-sm text-muted-foreground">
+                No knowledge captured yet. Ask questions in your projects to see AI-generated answers here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentAnswers.map((a) => (
+                <div
+                  key={a.id}
+                  className="bg-card rounded-xl border border-border p-5 flex gap-4"
+                  style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+                >
+                  <div className="h-9 w-9 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                    <Sparkles className="h-4 w-4 text-accent" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm leading-relaxed">{a.question.text}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {(a.sources ?? []).map((s, idx) => (
+                        <span
+                          key={idx}
+                          className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium"
+                        >
+                          {s.tool}
+                        </span>
+                      ))}
                       <span
-                        key={s}
-                        className="text-xs px-2 py-1 rounded-md bg-muted text-muted-foreground font-medium"
+                        className={`text-xs px-2 py-0.5 rounded-md border font-semibold ${confidenceStyles[a.confidence] ?? confidenceStyles.medium}`}
                       >
-                        {s}
+                        {confidenceLabel[a.confidence] ?? "Medium"}
                       </span>
-                    ))}
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-md border font-semibold ${confidenceStyles[c.confidence]}`}
-                    >
-                      {confidenceLabel[c.confidence]}
-                    </span>
-                    <span className="text-xs text-muted-foreground">· {c.time}</span>
-                    <Link to="/answer" className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
-                      View source <ExternalLink className="h-3 w-3" />
-                    </Link>
+                      <span className="text-xs text-muted-foreground">· {relativeTime(a.created_at)}</span>
+                      <Link to="/answer" search={{ id: a.id }} className="ml-auto text-xs font-semibold text-accent hover:underline inline-flex items-center gap-1">
+                        View source <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Section 3 */}
@@ -198,24 +197,37 @@ function DashboardPage() {
           <h2 className="font-heading text-xl font-semibold mb-4">
             Flagged for your input
           </h2>
-          <div className="bg-card rounded-xl border border-border divide-y divide-border" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
-            {flagged.map((f, i) => (
-              <div key={i} className="p-5 flex items-center gap-4">
-                <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
-                  <Flag className="h-4 w-4 text-warning" />
+          {flaggedQs === null ? (
+            <div className="text-sm text-muted-foreground">Loading flagged questions…</div>
+          ) : flaggedQs.length === 0 ? (
+            <div
+              className="bg-card rounded-xl border border-dashed border-border p-10 text-center"
+              style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}
+            >
+              <p className="text-sm text-muted-foreground">
+                No questions flagged for your input.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-card rounded-xl border border-border divide-y divide-border" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
+              {flaggedQs.map((q) => (
+                <div key={q.id} className="p-5 flex items-center gap-4">
+                  <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+                    <Flag className="h-4 w-4 text-warning" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">{q.text}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {q.project_name}
+                    </p>
+                  </div>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 shrink-0">
+                    Answer
+                  </Button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{f.question}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Asked by <span className="font-medium text-foreground">{f.asker}</span> · {f.project}
-                  </p>
-                </div>
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 h-9 shrink-0">
-                  Answer
-                </Button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </AppShell>

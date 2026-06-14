@@ -13,7 +13,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    // Allow GOOGLE_CLIENT_SECRET from .env in server bundles (used only in server functions).
-    envPrefix: ["VITE_", "GOOGLE_"],
+    // Allow server-only secrets from .env in server bundles (used only in server functions).
+    envPrefix: ["VITE_", "GOOGLE_", "SLACK_", "ATLASSIAN_", "AI_"],
   },
 });

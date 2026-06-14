@@ -14,9 +14,22 @@ import {
   ThumbsDown,
   Flag,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import {
+  getAnswer,
+  getMyFeedback,
+  type AnswerWithQuestion,
+  type AnswerFeedback,
+} from "@/lib/questions";
+import { submitAnswerFeedback, flagQuestion } from "@/lib/ask-question";
 
 export const Route = createFileRoute("/answer")({
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === "string" ? search.id : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Answer detail — TeamMind" },
@@ -35,11 +48,11 @@ const sourceColors: Record<string, string> = {
   Drive: "#1FA463",
 };
 
-function ToolBadge({ tool }: { tool: keyof typeof sourceColors }) {
+function ToolBadge({ tool }: { tool: string }) {
   return (
     <span
       className="h-8 w-8 rounded-md flex items-center justify-center text-xs font-bold text-white shrink-0"
-      style={{ background: sourceColors[tool] }}
+      style={{ background: sourceColors[tool] ?? "#6B7280" }}
     >
       {tool[0]}
     </span>
@@ -78,7 +91,147 @@ function Highlight({
   );
 }
 
+/** Format a date string as relative time (e.g. "2 hours ago"). */
+function relativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffSec = Math.max(0, Math.floor((now - then) / 1000));
+
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+/** Map confidence level to display label and color class. */
+function confidenceDisplay(level: "high" | "medium" | "low") {
+  switch (level) {
+    case "high":
+      return { label: "High confidence", colorClass: "bg-success", textClass: "text-success" };
+    case "medium":
+      return { label: "Medium confidence", colorClass: "bg-yellow-400", textClass: "text-yellow-500" };
+    case "low":
+      return { label: "Low confidence", colorClass: "bg-destructive", textClass: "text-destructive" };
+  }
+}
+
 function AnswerDetailPage() {
+  const { id } = Route.useSearch();
+  const { session } = useAuth();
+  const accessToken = session?.access_token ?? "";
+
+  const [answer, setAnswer] = useState<AnswerWithQuestion | null>(null);
+  const [feedback, setFeedback] = useState<AnswerFeedback | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [flagged, setFlagged] = useState(false);
+  const [flagLoading, setFlagLoading] = useState(false);
+
+  useEffect(() => {
+    if (!id) {
+      setError("No answer ID provided.");
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [answerData, feedbackData] = await Promise.all([
+          getAnswer(id!),
+          getMyFeedback(id!),
+        ]);
+        if (cancelled) return;
+        if (!answerData) {
+          setError("Answer not found.");
+        } else {
+          setAnswer(answerData);
+          setFeedback(feedbackData);
+          if (answerData.question.status === "flagged") setFlagged(true);
+        }
+      } catch (e) {
+        if (!cancelled) setError("Failed to load answer.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  async function handleVote(vote: "up" | "down") {
+    if (!answer || feedbackLoading) return;
+    setFeedbackLoading(true);
+    try {
+      await submitAnswerFeedback({
+        data: { answerId: answer.id, vote, accessToken },
+      });
+      setFeedback((prev) =>
+        prev ? { ...prev, vote } : { id: "", answer_id: answer.id, user_id: "", vote, created_at: "" },
+      );
+    } catch {
+      // silently ignore
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }
+
+  async function handleFlag() {
+    if (!answer || flagLoading || flagged) return;
+    setFlagLoading(true);
+    try {
+      await flagQuestion({
+        data: { questionId: answer.question_id, accessToken },
+      });
+      setFlagged(true);
+    } catch {
+      // silently ignore
+    } finally {
+      setFlagLoading(false);
+    }
+  }
+
+  // ── Loading state ──────────────────────────────────────────
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="max-w-[800px] mx-auto flex flex-col items-center justify-center py-32 gap-3 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <p className="text-sm">Loading answer…</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  // ── Error / not-found state ────────────────────────────────
+  if (error || !answer) {
+    return (
+      <AppShell>
+        <div className="max-w-[800px] mx-auto flex flex-col items-center justify-center py-32 gap-4">
+          <p className="text-sm text-muted-foreground">{error ?? "Answer not found."}</p>
+          <Link to="/projects">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="h-4 w-4" /> Back to projects
+            </Button>
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const conf = confidenceDisplay(answer.confidence);
+
   return (
     <AppShell>
       <TooltipProvider delayDuration={120}>
@@ -94,7 +247,7 @@ function AnswerDetailPage() {
             </Link>
             <nav className="text-xs text-muted-foreground flex items-center gap-1.5 min-w-0">
               <Link to="/projects" className="hover:text-foreground truncate">
-                API Gateway Redesign
+                Project
               </Link>
               <ChevronRight className="h-3 w-3 shrink-0" />
               <span className="hover:text-foreground">AI Answers</span>
@@ -105,50 +258,27 @@ function AnswerDetailPage() {
 
           {/* Question */}
           <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight leading-tight">
-            Why did we choose Postgres over MongoDB?
+            {answer.question.text}
           </h1>
           <p className="text-sm text-muted-foreground mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>Answered just now</span>
+            <span>Answered {relativeTime(answer.created_at)}</span>
             <span className="text-border">·</span>
-            <span>3 sources</span>
+            <span>{answer.sources.length} source{answer.sources.length !== 1 ? "s" : ""}</span>
             <span className="text-border">·</span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
-              <span className="text-success font-semibold">High confidence</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${conf.colorClass}`} />
+              <span className={`${conf.textClass} font-semibold`}>{conf.label}</span>
             </span>
           </p>
 
           {/* Answer */}
           <article className="mt-8 space-y-4 text-[15px] leading-7 text-foreground">
-            <p>
-              The team chose Postgres primarily for its{" "}
-              <Highlight source="Slack · #platform-team" anchor="src-slack">
-                transactional consistency and the existing team expertise
-              </Highlight>
-              . The decision came after a structured review where the lead
-              engineer noted that the document model would require significant
-              data restructuring of our existing relational schemas.
-            </p>
-            <p>
-              During the March 14 architecture review, the platform team
-              concluded that{" "}
-              <Highlight source="Jira · PLAT-204" anchor="src-jira">
-                Postgres' mature replication story and JSONB support gave us
-                document-style flexibility without losing ACID guarantees
-              </Highlight>
-              . MongoDB was considered but ruled out due to operational overhead
-              and uncertainty around multi-region writes.
-            </p>
-            <p>
-              The final decision was recorded in the Architecture Decision
-              Record, where the team documented that{" "}
-              <Highlight source="Drive · ADR v2.pdf" anchor="src-drive">
-                Postgres aligns with our long-term observability and backup
-                tooling, and the team can ship faster on a stack they already
-                operate in production
-              </Highlight>
-              .
-            </p>
+            {answer.content
+              .split("\n\n")
+              .filter((p) => p.trim())
+              .map((paragraph, i) => (
+                <p key={i}>{paragraph}</p>
+              ))}
           </article>
 
           {/* Sources */}
@@ -157,119 +287,36 @@ function AnswerDetailPage() {
               Sources used
             </h2>
             <div className="space-y-4">
-              {/* Slack */}
-              <div
-                id="src-slack"
-                className="bg-card rounded-xl border border-border p-5 scroll-mt-24"
-                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
-              >
-                <div className="flex items-center gap-3 mb-1">
-                  <ToolBadge tool="Slack" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">#platform-team</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      March 14, 2025 · 14:32
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-8">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    View in Slack
-                  </Button>
-                </div>
-                <blockquote className="mt-4 rounded-lg bg-muted/60 border-l-2 border-border p-4">
-                  <div className="flex items-start gap-3">
-                    <span
-                      className="h-8 w-8 rounded-md flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                      style={{ background: "#0F1C2E" }}
-                    >
-                      AM
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs">
-                        <span className="font-semibold text-foreground">
-                          Aisha Mensah
-                        </span>{" "}
-                        <span className="text-muted-foreground">14:32</span>
-                      </p>
-                      <p className="text-sm leading-relaxed mt-1 text-foreground">
-                        Sticking with Postgres. We get transactional consistency
-                        out of the box and the whole platform team already
-                        operates it. Migrating to Mongo means re-modelling half
-                        the schemas — not worth the cost this quarter.
+              {answer.sources.map((source, i) => (
+                <div
+                  key={i}
+                  id={`src-${i}`}
+                  className="bg-card rounded-xl border border-border p-5 scroll-mt-24"
+                  style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <ToolBadge tool={source.tool} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">
+                        {source.label}
                       </p>
                     </div>
+                    <Button variant="outline" size="sm" className="h-8">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View in {source.tool}
+                    </Button>
                   </div>
-                </blockquote>
-              </div>
-
-              {/* Jira */}
-              <div
-                id="src-jira"
-                className="bg-card rounded-xl border border-border p-5 scroll-mt-24"
-                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <ToolBadge tool="Jira" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">
-                      PLAT-204 — Database selection decision
+                  <blockquote className="rounded-lg bg-muted/60 border-l-2 border-border p-4">
+                    <p className="text-sm leading-relaxed text-foreground">
+                      {source.excerpt}
                     </p>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-success/15 text-success font-semibold uppercase tracking-wide">
-                        Done
-                      </span>
-                      <span>· Assigned to Lena Park</span>
-                      <span>· Mar 14, 2025</span>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-8">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    View in Jira
-                  </Button>
+                  </blockquote>
                 </div>
-                <blockquote className="rounded-lg bg-muted/60 border-l-2 border-border p-4">
-                  <p className="text-sm leading-relaxed text-foreground">
-                    Decision: adopt Postgres 15 as the primary store for the
-                    gateway. JSONB gives us document-style flexibility for
-                    config payloads without losing ACID guarantees, and
-                    logical replication covers our multi-region read needs.
-                    Re-evaluate in Q4 if write throughput becomes the
-                    bottleneck.
-                  </p>
-                </blockquote>
-              </div>
+              ))}
 
-              {/* Drive */}
-              <div
-                id="src-drive"
-                className="bg-card rounded-xl border border-border p-5 scroll-mt-24"
-                style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
-              >
-                <div className="flex items-center gap-3 mb-1">
-                  <ToolBadge tool="Drive" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">
-                      Architecture Decision Record v2.pdf
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Page 4, Section 2.3
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-8">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    View in Drive
-                  </Button>
-                </div>
-                <blockquote className="mt-4 rounded-lg bg-muted/60 border-l-2 border-border p-4">
-                  <p className="text-sm leading-relaxed text-foreground">
-                    "Postgres aligns with our long-term observability stack
-                    (pganalyze, Datadog) and our existing backup and
-                    point-in-time recovery tooling. Selecting it lets the
-                    platform team ship the gateway redesign on infrastructure
-                    they already operate in production."
-                  </p>
-                </blockquote>
-              </div>
+              {answer.sources.length === 0 && (
+                <p className="text-sm text-muted-foreground">No sources cited for this answer.</p>
+              )}
             </div>
           </section>
 
@@ -279,18 +326,46 @@ function AnswerDetailPage() {
               Was this answer helpful?
             </p>
             <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" size="sm" className="h-9">
-                <ThumbsUp className="h-4 w-4" />
+              <Button
+                variant={feedback?.vote === "up" ? "default" : "outline"}
+                size="sm"
+                className="h-9"
+                disabled={feedbackLoading}
+                onClick={() => handleVote("up")}
+              >
+                {feedbackLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ThumbsUp className="h-4 w-4" />
+                )}
                 Yes
               </Button>
-              <Button variant="outline" size="sm" className="h-9">
-                <ThumbsDown className="h-4 w-4" />
+              <Button
+                variant={feedback?.vote === "down" ? "default" : "outline"}
+                size="sm"
+                className="h-9"
+                disabled={feedbackLoading}
+                onClick={() => handleVote("down")}
+              >
+                {feedbackLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ThumbsDown className="h-4 w-4" />
+                )}
                 No
               </Button>
             </div>
-            <button className="mt-5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors">
+            <button
+              className="mt-5 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              disabled={flagLoading || flagged}
+              onClick={handleFlag}
+            >
               <Flag className="h-3.5 w-3.5" />
-              Something missing? Flag this for your team
+              {flagged
+                ? "Flagged for your team"
+                : flagLoading
+                  ? "Flagging…"
+                  : "Something missing? Flag this for your team"}
             </button>
           </section>
         </div>

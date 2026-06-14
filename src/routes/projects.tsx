@@ -19,8 +19,12 @@ import {
   MessageSquare,
   Plus,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { getProject, type ConnectedSource, type Project, type ProjectMember } from "@/lib/projects";
+import { useAuth } from "@/lib/auth-context";
+import { askQuestion } from "@/lib/ask-question";
+import { listAnswers, listOpenQuestions, getProjectStats, type AnswerWithQuestion, type Question } from "@/lib/questions";
 
 export const Route = createFileRoute("/projects")({
   validateSearch: (search: Record<string, unknown>): { id?: string } => ({
@@ -75,51 +79,7 @@ function SourceChip({
   );
 }
 
-const answers = [
-  {
-    question: "Why did we choose Postgres over MongoDB?",
-    answer:
-      "The team chose Postgres primarily for its transactional consistency and the existing team expertise. During the March architecture review, the lead engineer noted that MongoDB's document model would require significant data restructuring. The decision was finalised in the Jira ticket and confirmed in Slack.",
-    sources: [
-      { tool: "Slack" as const, label: "#platform-team · Mar 14" },
-      { tool: "Jira" as const, label: "PLAT-204" },
-      { tool: "Drive" as const, label: "Architecture Decision Record v2.pdf" },
-    ],
-    confidence: "high" as const,
-  },
-  {
-    question:
-      "What are the known risks of the current API rate limiting approach?",
-    answer:
-      "The current token-bucket implementation lives in the edge layer and is not synchronised across regions, so a client hitting two POPs can effectively double their quota. The platform team also flagged that bursts above 5x the steady rate are silently dropped without a 429 response, which makes client-side debugging painful. A redesign using a shared Redis counter is in scoping.",
-    sources: [
-      { tool: "Jira" as const, label: "PLAT-318" },
-      { tool: "Confluence" as const, label: "Rate Limiting RFC" },
-    ],
-    confidence: "medium" as const,
-  },
-];
 
-const openQuestions = [
-  {
-    status: "red" as const,
-    text: "Should the v2 gateway expose gRPC alongside REST for internal services?",
-    asker: "Priya Shah",
-    when: "2 days ago",
-  },
-  {
-    status: "amber" as const,
-    text: "What's the migration plan for clients still on the legacy /v0 endpoints?",
-    asker: "Marcus Okafor",
-    when: "yesterday",
-  },
-  {
-    status: "green" as const,
-    text: "Are we keeping mTLS between the gateway and the auth service?",
-    asker: "Lena Park",
-    when: "4 hours ago",
-  },
-];
 
 const statusColor = {
   red: "bg-destructive",
@@ -153,22 +113,56 @@ const confidenceMeta = {
 
 function ProjectPage() {
   const { id } = Route.useSearch();
+  const { session } = useAuth();
   const [tab, setTab] = useState<"answers" | "open">("answers");
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!id) return;
-    getProject(id)
+  // Real data state
+  const [answers, setAnswers] = useState<AnswerWithQuestion[]>([]);
+  const [openQs, setOpenQs] = useState<Question[]>([]);
+  const [stats, setStats] = useState<{ decisionsCount: number; openQuestionsCount: number; lastActivity: string | null } | null>(null);
+
+  // Ask box state
+  const [questionText, setQuestionText] = useState("");
+  const [asking, setAsking] = useState(false);
+
+  const fetchData = (projectId: string) => {
+    getProject(projectId)
       .then((d) => {
         setProject(d.project);
         setMembers(d.members);
         setConnectedSources(d.sources);
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load project"));
+    listAnswers(projectId).then(setAnswers).catch(() => {});
+    listOpenQuestions(projectId).then(setOpenQs).catch(() => {});
+    getProjectStats(projectId).then(setStats).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    fetchData(id);
   }, [id]);
+
+  const onAsk = async () => {
+    if (!id || !questionText.trim() || asking) return;
+    setAsking(true);
+    try {
+      await askQuestion({ data: { projectId: id, text: questionText.trim(), accessToken: session?.access_token ?? "" } });
+      setQuestionText("");
+      // Refresh answers, open questions, and stats
+      listAnswers(id).then(setAnswers).catch(() => {});
+      listOpenQuestions(id).then(setOpenQs).catch(() => {});
+      getProjectStats(id).then(setStats).catch(() => {});
+    } catch (e) {
+      // Silently handle — could add toast here
+    } finally {
+      setAsking(false);
+    }
+  };
 
   if (!id) {
     return (
@@ -218,9 +212,15 @@ function ProjectPage() {
                   rows={3}
                   placeholder="Ask anything about this project… e.g. Why did we decide to use OAuth over API keys?"
                   className="flex-1 resize-none border-0 focus-visible:ring-0 shadow-none text-base p-2"
+                  value={questionText}
+                  onChange={(e) => setQuestionText(e.target.value)}
                 />
-                <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6 font-semibold">
-                  Ask
+                <Button
+                  className="bg-accent text-accent-foreground hover:bg-accent/90 h-10 px-6 font-semibold"
+                  onClick={onAsk}
+                  disabled={asking || !questionText.trim()}
+                >
+                  {asking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ask"}
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground mt-2 px-2">
@@ -255,12 +255,18 @@ function ProjectPage() {
             {/* Tab content */}
             {tab === "answers" ? (
               <div className="space-y-4">
-                {answers.map((a, i) => {
+                {answers.length === 0 && (
+                  <div className="text-sm text-muted-foreground text-center py-12">
+                    No answers yet. Ask a question above to get started.
+                  </div>
+                )}
+                {answers.map((a) => {
                   const c = confidenceMeta[a.confidence];
+                  const truncated = a.content.length > 300 ? a.content.slice(0, 300) + "…" : a.content;
                   return (
                     <Link
-                      to="/answer"
-                      key={i}
+                      to={`/answer?id=${a.id}`}
+                      key={a.id}
                       className="block bg-card rounded-xl border border-border p-6 hover:border-accent/50 transition-colors"
                       style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
                     >
@@ -271,10 +277,10 @@ function ProjectPage() {
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">
-                        {a.question}
+                        {a.question.text}
                       </p>
                       <p className="text-sm leading-relaxed text-foreground mb-5">
-                        {a.answer}
+                        {truncated}
                       </p>
 
                       <div className="mb-5">
@@ -327,30 +333,31 @@ function ProjectPage() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-muted-foreground">
-                    {openQuestions.length} questions from your team
+                    {openQs.length} question{openQs.length === 1 ? "" : "s"} from your team
                   </p>
                   <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-9">
                     <Plus className="h-4 w-4" />
                     Ask the team
                   </Button>
                 </div>
+                {openQs.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-12">
+                    No open questions right now.
+                  </div>
+                ) : (
                 <div
                   className="bg-card rounded-xl border border-border divide-y divide-border"
                   style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
                 >
-                  {openQuestions.map((q, i) => (
-                    <div key={i} className="p-4 flex items-center gap-4">
+                  {openQs.map((q) => (
+                    <div key={q.id} className="p-4 flex items-center gap-4">
                       <span
-                        className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusColor[q.status]}`}
+                        className={`h-2.5 w-2.5 rounded-full shrink-0 ${q.status === "flagged" ? statusColor.red : statusColor.amber}`}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{q.text}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Asked by{" "}
-                          <span className="font-medium text-foreground">
-                            {q.asker}
-                          </span>{" "}
-                          · {q.when}
+                          {timeAgo(q.created_at)}
                         </p>
                       </div>
                       <Button
@@ -362,6 +369,7 @@ function ProjectPage() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -449,15 +457,15 @@ function ProjectPage() {
               <ul className="space-y-3 text-sm">
                 <li className="flex items-center justify-between">
                   <span className="text-muted-foreground">Decisions captured</span>
-                  <span className="font-semibold">23</span>
+                  <span className="font-semibold">{stats?.decisionsCount ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between">
                   <span className="text-muted-foreground">Open questions</span>
-                  <span className="font-semibold">4</span>
+                  <span className="font-semibold">{stats?.openQuestionsCount ?? "—"}</span>
                 </li>
                 <li className="flex items-center justify-between">
                   <span className="text-muted-foreground">Last activity</span>
-                  <span className="font-semibold">1 hour ago</span>
+                  <span className="font-semibold">{stats?.lastActivity ? timeAgo(stats.lastActivity) : "—"}</span>
                 </li>
               </ul>
             </div>
